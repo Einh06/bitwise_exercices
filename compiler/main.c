@@ -40,8 +40,7 @@ void *buf__grow(void *buf, size_t new_len, size_t elem_size) {
     return buf__reserve(buf, new_cap, elem_size);
 }
 
-int main(int argc, char** argv) {
-
+void buf_test() {
     int* int_buf = NULL;
     assert(buf_len(int_buf) == 0);
     assert(buf_cap(int_buf) == 0);
@@ -54,10 +53,20 @@ int main(int argc, char** argv) {
         printf("%d\n", int_buf[i]);
     }
     buf_free(int_buf);
+    assert(buf_cap(int_buf) == 0);
     float* float_buf = NULL;
     buf_reserve(float_buf, 1024);
     size_t cap = buf_cap(float_buf);
     assert(cap == 1024);
     assert(buf_len(float_buf) == 0);
+}
+
+void do_test() {
+    buf_test();
+}
+
+int main(int argc, char** argv) {
+
+    do_test();
     return 0;
 }
