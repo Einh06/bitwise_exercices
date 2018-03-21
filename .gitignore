@@ -1,3 +1,5 @@
 *.dSYM
 *.swp
 *.4coder
+
+compiler/main
