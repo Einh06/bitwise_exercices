@@ -559,13 +559,44 @@ typedef enum OpExprType {
     OPTYPE_UNARY,
 } OpExprType;
 
+typedef enum OpCode {
+    OPCODE_ADD,
+    OPCODE_MIN,
+    OPCODE_OR,
+    OPCODE_XOR,
+    OPCODE_MUL,
+    OPCODE_DIV,
+    OPCODE_MOD,
+    OPCODE_SHFTL,
+    OPCODE_SHFTR,
+    OPCODE_AND,
+    OPCODE_COMPL,
+    OPCODE_NEG,
+    OPCODE_COUNT,
+} OpCode;
+
+static char *OpStrings[] = {
+    [OPCODE_ADD] = "+",
+    [OPCODE_MIN] = "-",
+    [OPCODE_OR] = "|",
+    [OPCODE_XOR] = "^",
+    [OPCODE_MUL] = "*",
+    [OPCODE_DIV] = "/",
+    [OPCODE_MOD] = "%",
+    [OPCODE_SHFTL] = "<<",
+    [OPCODE_SHFTR] = ">>",
+    [OPCODE_AND] = "&",
+    [OPCODE_COMPL] = "~",
+    [OPCODE_NEG] = "-",
+};
+
 typedef struct Expr Expr;
 struct Expr {
     ExprType type;
     union {
         struct {
             OpExprType type;
-            const char* op_code;
+            OpCode op_code;
             union {
                 struct {
                     Expr* left;
@@ -580,7 +611,7 @@ struct Expr {
     };
 };
 
-Expr* expr_binary_op(const char* op, Expr* left, Expr* right) {
+Expr* expr_binary_op(OpCode op, Expr* left, Expr* right) {
     Expr* result = ast_alloc(sizeof(Expr));
     result->type = EXPRTYPE_OP;
     result->op.type = OPTYPE_BINARY;
@@ -590,7 +621,7 @@ Expr* expr_binary_op(const char* op, Expr* left, Expr* right) {
     return result;
 }
 
-Expr* expr_unary_op(const char* op, Expr* expr) {
+Expr* expr_unary_op(OpCode op, Expr* expr) {
     Expr* result = ast_alloc(sizeof(Expr));
     result->type = EXPRTYPE_OP;
     result->op.type = OPTYPE_UNARY;
@@ -616,7 +647,7 @@ void print_expr(Expr* e) {
         case EXPRTYPE_OP:
         {
             printf("(");
-            printf("%s ", e->op.op_code);
+            printf("%s ", OpStrings[e->op.op_code]);
             switch (e->op.type) {
                 case OPTYPE_BINARY:
                 {
@@ -646,12 +677,12 @@ Expr* parse_term() {
 
 Expr* parse_unary() {
     if (is_token(TOKENKIND_MIN) || is_token(TOKENKIND_COMPL)) {
-        char* op = "";
+        OpCode op;
         if (match_token(TOKENKIND_MIN)) {
-            op = "-";
+            op = OPCODE_NEG;
         }
         if (match_token(TOKENKIND_COMPL)) {
-            op = "~";
+            op = OPCODE_COMPL;
         }
         return expr_unary_op(op, parse_term());
     }
@@ -661,26 +692,26 @@ Expr* parse_unary() {
 Expr* parse_mul() {
     Expr* e = parse_unary();
     while (is_token_mul(token.kind)) {
-        char* op = "";
+        OpCode op;
         if (match_token(TOKENKIND_MUL)) {
-            op = "*";
+            op = OPCODE_MUL;
         }
         if (match_token(TOKENKIND_DIV)) {
-            op = "/";
+            op = OPCODE_DIV;
         }
         if (match_token(TOKENKIND_MOD)) {
-            op = "%";
+            op = OPCODE_MOD;
         }
         if (match_token(TOKENKIND_SHFTL)) {
-            op = "<<";
+            op = OPCODE_SHFTL;
         }
         
         if (match_token(TOKENKIND_SHFTR)) {
-            op = ">>";
+            op = OPCODE_SHFTR;
         }
         
         if (match_token(TOKENKIND_AND)) {
-            op = "&";
+            op = OPCODE_AND;
         }
         
         e = expr_binary_op(op, e, parse_unary());
@@ -691,18 +722,18 @@ Expr* parse_mul() {
 Expr* parse_add() {
     Expr* e = parse_mul();
     while (is_token_add(token.kind)) {
-        char* op = "";
+        OpCode op;
         if (match_token(TOKENKIND_ADD)) {
-            op = "+";
+            op = OPCODE_ADD;
         }
         if (match_token(TOKENKIND_MIN)) {
-            op = "-";
+            op = OPCODE_MIN;
         }
         if (match_token(TOKENKIND_OR)) {
-            op = "|";
+            op = OPCODE_OR;
         }
         if (match_token(TOKENKIND_XOR)) {
-            op = "^";
+            op = OPCODE_XOR;
         }
         
         e = expr_binary_op(op, e, parse_mul());
@@ -727,34 +758,56 @@ s64 interpret_expr(Expr* e) {
             switch (e->op.type) {
                 case OPTYPE_BINARY:
                 {
-                    if (strcmp(e->op.op_code, "+") == 0) {
+                    switch (e->op.op_code) {
+                        case OPCODE_ADD:
                         result = interpret_expr(e->op.left) + interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "-") == 0) {
+                        break;
+                        
+                        case OPCODE_MIN:
                         result = interpret_expr(e->op.left) - interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "|") == 0) {
+                        break;
+                        
+                        case OPCODE_OR:
                         result = interpret_expr(e->op.left) | interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "^") == 0) {
+                        break;
+                        
+                        case OPCODE_XOR:
                         result = interpret_expr(e->op.left) ^ interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "*") == 0) {
+                        break;
+                        
+                        case OPCODE_MUL:
                         result = interpret_expr(e->op.left) * interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "/") == 0) {
+                        break;
+                        
+                        case OPCODE_DIV:
                         result = interpret_expr(e->op.left) / interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "%") == 0) {
+                        break;
+                        
+                        case OPCODE_MOD:
                         result = interpret_expr(e->op.left) % interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "&") == 0) {
+                        break;
+                        
+                        case OPCODE_AND:
                         result = interpret_expr(e->op.left) & interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, "<<") == 0) {
+                        break;
+                        
+                        case OPCODE_SHFTL:
                         result = interpret_expr(e->op.left) << interpret_expr(e->op.right);
-                    }else if (strcmp(e->op.op_code, ">>") == 0) {
+                        break;
+                        
+                        case OPCODE_SHFTR:
                         result = interpret_expr(e->op.left) >> interpret_expr(e->op.right);
+                        break;
+                        
+                        default:
+                        exit(1);
                     }
-                    break;
                 }
                 case OPTYPE_UNARY:
                 {
-                    if (strcmp(e->op.op_code, "-") == 0) {
+                    if (e->op.op_code == OPCODE_NEG) {
                         result = -interpret_expr(e->op.expr);
-                    } else if (strcmp(e->op.op_code, "~") == 0) {
+                    } else if (e->op.op_code == OPCODE_COMPL) {
                         result = ~interpret_expr(e->op.expr);
                     }
                     break;
