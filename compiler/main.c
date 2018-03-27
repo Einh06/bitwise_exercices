@@ -1,13 +1,13 @@
 //TODO(Florian): Handle error properly when EOF is there
 //TODO(Florian): Handle eating whitespace
-//TODO(Florian): refactor TokenKind to use directly char for OP, as shown by Per Vognsen for bitwise
-//TODO(Florian): 
+//TODO(Florian): Write more text cases
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include <assert.h>
 
 typedef uint8_t u8;
@@ -79,20 +79,23 @@ void buf_test() {
 
 typedef enum TokenKind {
     
-    TOKENKIND_MIN,
-    TOKENKIND_COMPL,
-    
-    TOKENKIND_MUL,
+    TOKENKIND_FIRST_MUL,
+    TOKENKIND_MUL = TOKENKIND_FIRST_MUL,
     TOKENKIND_DIV,
     TOKENKIND_MOD,
     TOKENKIND_SHFTL,
     TOKENKIND_SHFTR,
     TOKENKIND_AND,
+    TOKENKIND_LAST_MUL = TOKENKIND_AND,
     
-    TOKENKIND_ADD,
+    TOKENKIND_FIRST_ADD,
+    TOKENKIND_ADD = TOKENKIND_FIRST_ADD,
     TOKENKIND_OR,
     TOKENKIND_XOR,
+    TOKENKIND_MIN,
+    TOKENKIND_LAST_ADD = TOKENKIND_MIN,
     
+    TOKENKIND_COMPL,
     TOKENKIND_VAL,
 } TokenKind;
 
@@ -235,6 +238,14 @@ bool expect_token(TokenKind kind) {
     }
 }
 
+bool is_token_add(TokenKind kind) {
+    return kind >= TOKENKIND_FIRST_ADD && kind <= TOKENKIND_LAST_ADD;
+}
+
+bool is_token_mul(TokenKind kind) {
+    return kind >= TOKENKIND_FIRST_MUL && kind <= TOKENKIND_LAST_MUL;
+}
+
 #if 0
 expr3 = VAL
 expr2 = [-~] expr3
@@ -266,7 +277,7 @@ s64 inter_parse_expr2() {
 
 s64 inter_parse_expr1() {
     s64 val = inter_parse_expr2();
-    while (is_token(TOKENKIND_MUL) || is_token(TOKENKIND_DIV) || is_token(TOKENKIND_MOD) || is_token(TOKENKIND_AND) || is_token(TOKENKIND_SHFTL) || is_token(TOKENKIND_SHFTR)) {
+    while (is_token_mul(token.kind)) {
         
         if (match_token(TOKENKIND_MUL)){
             val *= inter_parse_expr2();
@@ -297,7 +308,7 @@ s64 inter_parse_expr1() {
 
 s64 inter_parse_expr0() {
     s64 val = inter_parse_expr1();
-    while (is_token(TOKENKIND_ADD) || is_token(TOKENKIND_MIN) || is_token(TOKENKIND_OR) || is_token(TOKENKIND_XOR)) {
+    while (is_token_add(token.kind)) {
         
         if(match_token(TOKENKIND_ADD)) {
             val += inter_parse_expr1();
@@ -381,6 +392,14 @@ void inter_test() {
     assert(inter_parse_expr() == 2);
 }
 
+
+void* ast_alloc(size_t size) {
+    assert(size != 0);
+    void* mem = malloc(size);
+    memset(mem, 0, size);
+    return mem;
+}
+
 typedef enum NodeType {
     NODETYPE_OP,
     NODETYPE_VAL,
@@ -396,12 +415,8 @@ typedef struct Ast_Node {
     struct Ast_Node *right;
 }Ast_Node;
 
-typedef struct Ast {
-    Ast_Node root;
-} Ast;
-
 Ast_Node* make_op(char op) {
-    Ast_Node* result = malloc(sizeof(Ast_Node));
+    Ast_Node* result = ast_alloc(sizeof(Ast_Node));
     result->type = NODETYPE_OP;
     result->op = op;
     result->left = result->right = NULL;
@@ -409,21 +424,21 @@ Ast_Node* make_op(char op) {
 }
 
 Ast_Node* make_val(s64 val) {
-    Ast_Node* result = malloc(sizeof(Ast_Node));
+    Ast_Node* result = ast_alloc(sizeof(Ast_Node));
     result->type = NODETYPE_VAL;
     result->val = val;
     result->left = result->right = NULL;
     return result;
 }
 
-Ast_Node* parse_expr3() {
+Ast_Node* ast_parse_expr3() {
     assert(is_token(TOKENKIND_VAL));
     Ast_Node* result = make_val(token.val);
     next_token();
     return result;
 }
 
-Ast_Node* parse_expr2() {
+Ast_Node* ast_parse_expr2() {
     Ast_Node* op_node = NULL;
     if (match_token(TOKENKIND_MIN)) {
         op_node = make_op('-');
@@ -431,7 +446,7 @@ Ast_Node* parse_expr2() {
     if (match_token(TOKENKIND_COMPL)) {
         op_node = make_op('~');
     }
-    Ast_Node* n = parse_expr3();
+    Ast_Node* n = ast_parse_expr3();
     if (op_node != NULL) {
         op_node->right = n;
         return op_node;
@@ -439,13 +454,12 @@ Ast_Node* parse_expr2() {
     return n;
 }
 
-Ast_Node* parse_expr1() {
-    Ast_Node* n = parse_expr2();
+Ast_Node* ast_parse_expr1() {
+    Ast_Node* n = ast_parse_expr2();
     Ast_Node* result = n;
     Ast_Node* left = n;
     
-    while (is_token(TOKENKIND_MUL) || is_token(TOKENKIND_DIV) || is_token(TOKENKIND_MOD) || 
-           is_token(TOKENKIND_AND) || is_token(TOKENKIND_SHFTL) || is_token(TOKENKIND_SHFTR)) {
+    while (is_token_mul(token.kind)) {
         
         char op;
         
@@ -477,17 +491,17 @@ Ast_Node* parse_expr1() {
         
         result = make_op(op);
         result->left = left;
-        result->right = parse_expr2();
+        result->right = ast_parse_expr2();
         left = result;
     }
     return result;
 }
 
-Ast_Node* parse_expr0() {
-    Ast_Node* n = parse_expr1();
+Ast_Node* ast_parse_expr0() {
+    Ast_Node* n = ast_parse_expr1();
     Ast_Node* result = n;
     Ast_Node* left = n;
-    while (is_token(TOKENKIND_ADD) || is_token(TOKENKIND_MIN) || is_token(TOKENKIND_OR) || is_token(TOKENKIND_XOR)) {
+    while (is_token_add(token.kind)) {
         
         char op;
         
@@ -510,14 +524,14 @@ Ast_Node* parse_expr0() {
         
         result = make_op(op);
         result->left = left;
-        result->right = parse_expr1();
+        result->right = ast_parse_expr1();
         left = result;
     }
     return result;
 }
 
-Ast_Node* parse_expr() {
-    return parse_expr0();
+Ast_Node* ast_parse_expr() {
+    return ast_parse_expr0();
 }
 
 void print_Ast(Ast_Node *n) {
@@ -534,15 +548,256 @@ void print_Ast(Ast_Node *n) {
     }
 }
 
+//Changed with better handled struct
+typedef enum ExprType {
+    EXPRTYPE_OP,
+    EXPRTYPE_VAL,
+} ExprType;
+
+typedef enum OpExprType {
+    OPTYPE_BINARY,
+    OPTYPE_UNARY,
+} OpExprType;
+
+typedef struct Expr Expr;
+struct Expr {
+    ExprType type;
+    union {
+        struct {
+            OpExprType type;
+            const char* op_code;
+            union {
+                struct {
+                    Expr* left;
+                    Expr* right;
+                };
+                struct {
+                    Expr* expr;
+                };
+            };
+        } op;
+        s64 val;
+    };
+};
+
+Expr* expr_binary_op(const char* op, Expr* left, Expr* right) {
+    Expr* result = ast_alloc(sizeof(Expr));
+    result->type = EXPRTYPE_OP;
+    result->op.type = OPTYPE_BINARY;
+    result->op.op_code = op;
+    result->op.left = left;
+    result->op.right = right;
+    return result;
+}
+
+Expr* expr_unary_op(const char* op, Expr* expr) {
+    Expr* result = ast_alloc(sizeof(Expr));
+    result->type = EXPRTYPE_OP;
+    result->op.type = OPTYPE_UNARY;
+    result->op.op_code = op;
+    result->op.expr = expr;
+    return result;
+}
+
+Expr* expr_val(s64 val) {
+    Expr* result = ast_alloc(sizeof(Expr));
+    result->type = EXPRTYPE_VAL;
+    result->val = val;
+    return result;
+}
+
+void print_expr(Expr* e) {
+    switch (e->type) {
+        case EXPRTYPE_VAL:
+        {
+            printf("%llu", e->val);
+            break;
+        }
+        case EXPRTYPE_OP:
+        {
+            printf("(");
+            printf("%s ", e->op.op_code);
+            switch (e->op.type) {
+                case OPTYPE_BINARY:
+                {
+                    print_expr(e->op.left);
+                    printf(" ");
+                    print_expr(e->op.right);
+                    break;
+                }
+                case OPTYPE_UNARY:
+                {
+                    print_expr(e->op.expr);
+                    break;
+                }
+            }
+            printf(")");
+            break;
+        }
+    }
+}
+
+Expr* parse_term() {
+    assert(is_token(TOKENKIND_VAL));
+    Expr* e = expr_val(token.val);
+    next_token();
+    return e;
+}
+
+Expr* parse_unary() {
+    if (is_token(TOKENKIND_MIN) || is_token(TOKENKIND_COMPL)) {
+        char* op = "";
+        if (match_token(TOKENKIND_MIN)) {
+            op = "-";
+        }
+        if (match_token(TOKENKIND_COMPL)) {
+            op = "~";
+        }
+        return expr_unary_op(op, parse_term());
+    }
+    return parse_term();
+}
+
+Expr* parse_mul() {
+    Expr* e = parse_unary();
+    while (is_token_mul(token.kind)) {
+        char* op = "";
+        if (match_token(TOKENKIND_MUL)) {
+            op = "*";
+        }
+        if (match_token(TOKENKIND_DIV)) {
+            op = "/";
+        }
+        if (match_token(TOKENKIND_MOD)) {
+            op = "%";
+        }
+        if (match_token(TOKENKIND_SHFTL)) {
+            op = "<<";
+        }
+        
+        if (match_token(TOKENKIND_SHFTR)) {
+            op = ">>";
+        }
+        
+        if (match_token(TOKENKIND_AND)) {
+            op = "&";
+        }
+        
+        e = expr_binary_op(op, e, parse_unary());
+    }
+    return e;
+}
+
+Expr* parse_add() {
+    Expr* e = parse_mul();
+    while (is_token_add(token.kind)) {
+        char* op = "";
+        if (match_token(TOKENKIND_ADD)) {
+            op = "+";
+        }
+        if (match_token(TOKENKIND_MIN)) {
+            op = "-";
+        }
+        if (match_token(TOKENKIND_OR)) {
+            op = "|";
+        }
+        if (match_token(TOKENKIND_XOR)) {
+            op = "^";
+        }
+        
+        e = expr_binary_op(op, e, parse_mul());
+    }
+    return e;
+}
+
+Expr* parse_expr() {
+    return parse_add();
+}
+
+s64 interpret_expr(Expr* e) {
+    s64 result = 0;
+    switch (e->type) {
+        case EXPRTYPE_VAL:
+        {
+            result = e->val;
+            break;
+        }
+        case EXPRTYPE_OP:
+        {
+            switch (e->op.type) {
+                case OPTYPE_BINARY:
+                {
+                    if (strcmp(e->op.op_code, "+") == 0) {
+                        result = interpret_expr(e->op.left) + interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "-") == 0) {
+                        result = interpret_expr(e->op.left) - interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "|") == 0) {
+                        result = interpret_expr(e->op.left) | interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "^") == 0) {
+                        result = interpret_expr(e->op.left) ^ interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "*") == 0) {
+                        result = interpret_expr(e->op.left) * interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "/") == 0) {
+                        result = interpret_expr(e->op.left) / interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "%") == 0) {
+                        result = interpret_expr(e->op.left) % interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "&") == 0) {
+                        result = interpret_expr(e->op.left) & interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, "<<") == 0) {
+                        result = interpret_expr(e->op.left) << interpret_expr(e->op.right);
+                    }else if (strcmp(e->op.op_code, ">>") == 0) {
+                        result = interpret_expr(e->op.left) >> interpret_expr(e->op.right);
+                    }
+                    break;
+                }
+                case OPTYPE_UNARY:
+                {
+                    if (strcmp(e->op.op_code, "-") == 0) {
+                        result = -interpret_expr(e->op.expr);
+                    } else if (strcmp(e->op.op_code, "~") == 0) {
+                        result = ~interpret_expr(e->op.expr);
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    return result;
+}
+
+void generate_bytecode(Expr* e) {
+    //TODO: Generate bytecode for Per's small virtual machine
+}
+
 void parse_test() {
     printf("\n");
     stream_init("28*8+19/7-15");
-    Ast_Node* r = parse_expr();
+    Ast_Node* r = ast_parse_expr();
     print_Ast(r);
     printf("\n");
     stream_init("1<<5>>2");
-    r = parse_expr();
+    r = ast_parse_expr();
     print_Ast(r);
+}
+
+void expr_test() {
+    printf("\n");
+    stream_init("28*8+19/7--15");
+    print_expr(parse_expr());
+    printf("\n");
+    stream_init("1<<5>>2");
+    print_expr(parse_expr());
+    printf("\n");
+}
+
+void inter_expr_test() {
+    stream_init("28*8+19/7--15");
+    s64 result = interpret_expr(parse_expr());
+    assert(result == 241);
+    stream_init("1<<5>>2");
+    result = interpret_expr(parse_expr());
+    assert(result == 8);
 }
 
 void do_test() {
@@ -550,6 +805,8 @@ void do_test() {
     lex_test();
     inter_test();
     parse_test();
+    expr_test();
+    inter_expr_test();
 }
 
 int main(int argc, char** argv) {
