@@ -79,6 +79,8 @@ void buf_test() {
 
 typedef enum TokenKind {
     
+    TOKENKIND_EOF,
+    
     TOKENKIND_FIRST_MUL,
     TOKENKIND_MUL = TOKENKIND_FIRST_MUL,
     TOKENKIND_DIV,
@@ -112,6 +114,7 @@ Token token;
 
 bool next_token() {
     char c;
+    start:
     switch ((c = *stream++)) {
         case '0':
         case '1':
@@ -205,6 +208,16 @@ bool next_token() {
             break;
         }
         
+        case '\0':
+        {
+            token.kind = TOKENKIND_EOF;
+            break;
+        }
+        case ' ': case '\t': case '\n':
+        {
+            goto start;
+            break;
+        }
         default:
         {
             //TODO: handle error when unrecognized character
@@ -836,7 +849,7 @@ void parse_test() {
 
 void expr_test() {
     printf("\n");
-    stream_init("28*8+19/7--15");
+    stream_init("28*8 +19/7- -15");
     print_expr(parse_expr());
     printf("\n");
     stream_init("1<<5>>2");
@@ -848,13 +861,13 @@ void inter_expr_test() {
     stream_init("28*8+19/7--15");
     s64 result = interpret_expr(parse_expr());
     assert(result == 241);
-    stream_init("1<<5>>2");
+    stream_init("1 << 5 >> 2");
     result = interpret_expr(parse_expr());
     assert(result == 8);
 }
 
 void do_test() {
-    buf_test();
+    //buf_test();
     lex_test();
     inter_test();
     parse_test();
