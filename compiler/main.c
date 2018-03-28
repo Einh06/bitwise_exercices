@@ -267,85 +267,6 @@ expr0 = expr1 ([+-|^] expr1)*
 expr = expr0
 #endif
 
-// TODO(Florian): Implement grouping with '(' and ')'
-s64 inter_parse_expr3() {
-    if (!is_token(TOKENKIND_VAL)) {
-        perror("Not expect tokenkind in depth3");
-    }
-    
-    s64 val = token.val;
-    next_token();
-    return val;
-}
-
-s64 inter_parse_expr2() {
-    if (match_token(TOKENKIND_MIN)) {
-        return -inter_parse_expr3();
-    }
-    if (match_token(TOKENKIND_COMPL)) {
-        return ~(inter_parse_expr3());
-    }
-    return inter_parse_expr3();
-}
-
-s64 inter_parse_expr1() {
-    s64 val = inter_parse_expr2();
-    while (is_token_mul(token.kind)) {
-        
-        if (match_token(TOKENKIND_MUL)){
-            val *= inter_parse_expr2();
-        }
-        
-        if(match_token(TOKENKIND_DIV)) {
-            val /= inter_parse_expr2();
-        }
-        
-        if(match_token(TOKENKIND_MOD)) {
-            val %= inter_parse_expr2();
-        }
-        
-        if(match_token(TOKENKIND_AND)) {
-            val &= inter_parse_expr2();
-        }
-        
-        if(match_token(TOKENKIND_SHFTL)) {
-            val <<= inter_parse_expr2();
-        }
-        
-        if(match_token(TOKENKIND_SHFTR)) {
-            val >>= inter_parse_expr2();
-        }
-    }
-    return val;
-}
-
-s64 inter_parse_expr0() {
-    s64 val = inter_parse_expr1();
-    while (is_token_add(token.kind)) {
-        
-        if(match_token(TOKENKIND_ADD)) {
-            val += inter_parse_expr1();
-        }
-        
-        if(match_token(TOKENKIND_MIN)) {
-            val -= inter_parse_expr1();
-        }
-        
-        if(match_token(TOKENKIND_OR)) {
-            val |= inter_parse_expr1();
-        }
-        
-        if(match_token(TOKENKIND_XOR)) {
-            val ^= inter_parse_expr1();
-        }
-    }
-    return val;
-}
-
-s64 inter_parse_expr() {
-    return inter_parse_expr0();
-}
-
 void lex_test_1() {
     char *expr = "1234<<>>+-~|&/%";
     stream = expr;
@@ -394,171 +315,11 @@ void stream_init(const char* expr) {
     next_token();
 }
 
-void inter_test() {
-    stream_init("12");
-    assert(inter_parse_expr() == 12);
-    stream_init("12+13");
-    assert(inter_parse_expr() == 25);
-    stream_init("2*3+4");
-    assert(inter_parse_expr() == 10);
-    stream_init("2*2-4*4/8");
-    assert(inter_parse_expr() == 2);
-}
-
-
 void* ast_alloc(size_t size) {
     assert(size != 0);
     void* mem = malloc(size);
     memset(mem, 0, size);
     return mem;
-}
-
-typedef enum NodeType {
-    NODETYPE_OP,
-    NODETYPE_VAL,
-} NodeType;
-
-typedef struct Ast_Node {
-    NodeType type;
-    union {
-        s64 val;
-        char op;
-    };
-    struct Ast_Node *left;
-    struct Ast_Node *right;
-}Ast_Node;
-
-Ast_Node* make_op(char op) {
-    Ast_Node* result = ast_alloc(sizeof(Ast_Node));
-    result->type = NODETYPE_OP;
-    result->op = op;
-    result->left = result->right = NULL;
-    return result;
-}
-
-Ast_Node* make_val(s64 val) {
-    Ast_Node* result = ast_alloc(sizeof(Ast_Node));
-    result->type = NODETYPE_VAL;
-    result->val = val;
-    result->left = result->right = NULL;
-    return result;
-}
-
-Ast_Node* ast_parse_expr3() {
-    assert(is_token(TOKENKIND_VAL));
-    Ast_Node* result = make_val(token.val);
-    next_token();
-    return result;
-}
-
-Ast_Node* ast_parse_expr2() {
-    Ast_Node* op_node = NULL;
-    if (match_token(TOKENKIND_MIN)) {
-        op_node = make_op('-');
-    }
-    if (match_token(TOKENKIND_COMPL)) {
-        op_node = make_op('~');
-    }
-    Ast_Node* n = ast_parse_expr3();
-    if (op_node != NULL) {
-        op_node->right = n;
-        return op_node;
-    }
-    return n;
-}
-
-Ast_Node* ast_parse_expr1() {
-    Ast_Node* n = ast_parse_expr2();
-    Ast_Node* result = n;
-    Ast_Node* left = n;
-    
-    while (is_token_mul(token.kind)) {
-        
-        char op;
-        
-        if(match_token(TOKENKIND_MUL)) {
-            op = '*';
-        }
-        
-        if(match_token(TOKENKIND_DIV)) {
-            op = '/';
-        }
-        
-        if(match_token(TOKENKIND_MOD)) {
-            op = '%';
-        }
-        
-        if(match_token(TOKENKIND_AND)) {
-            op = '&';
-        }
-        
-        if(match_token(TOKENKIND_SHFTL)) {
-            //TODO(Florian): Handle string instead of char
-            op = '<';
-        }
-        
-        if(match_token(TOKENKIND_SHFTR)) {
-            //TODO(Florian): Handle string instead of char
-            op = '>';
-        }
-        
-        result = make_op(op);
-        result->left = left;
-        result->right = ast_parse_expr2();
-        left = result;
-    }
-    return result;
-}
-
-Ast_Node* ast_parse_expr0() {
-    Ast_Node* n = ast_parse_expr1();
-    Ast_Node* result = n;
-    Ast_Node* left = n;
-    while (is_token_add(token.kind)) {
-        
-        char op;
-        
-        if(match_token(TOKENKIND_ADD)) {
-            op = '+';
-            
-        }
-        
-        if(match_token(TOKENKIND_MIN)) {
-            op = '-';
-        }
-        
-        if(match_token(TOKENKIND_OR)) {
-            op = '|';
-        }
-        
-        if(match_token(TOKENKIND_XOR)) {
-            op = '^';
-        }
-        
-        result = make_op(op);
-        result->left = left;
-        result->right = ast_parse_expr1();
-        left = result;
-    }
-    return result;
-}
-
-Ast_Node* ast_parse_expr() {
-    return ast_parse_expr0();
-}
-
-void print_Ast(Ast_Node *n) {
-    switch (n->type) {
-        case NODETYPE_OP: {
-            printf("(%c ", n->op);
-            if (n->left) { print_Ast(n->left); }
-            if (n->right) { print_Ast(n->right); }
-            printf(")");
-        } break;
-        case NODETYPE_VAL: {
-            printf("%lld ", n->val);
-        }break;
-    }
 }
 
 //Changed with better handled struct
@@ -836,17 +597,6 @@ void generate_bytecode(Expr* e) {
     //TODO: Generate bytecode for Per's small virtual machine
 }
 
-void parse_test() {
-    printf("\n");
-    stream_init("28*8+19/7-15");
-    Ast_Node* r = ast_parse_expr();
-    print_Ast(r);
-    printf("\n");
-    stream_init("1<<5>>2");
-    r = ast_parse_expr();
-    print_Ast(r);
-}
-
 void expr_test() {
     printf("\n");
     stream_init("28*8 +19/7- -15");
@@ -869,8 +619,6 @@ void inter_expr_test() {
 void do_test() {
     //buf_test();
     lex_test();
-    inter_test();
-    parse_test();
     expr_test();
     inter_expr_test();
 }
