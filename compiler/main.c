@@ -299,7 +299,7 @@ s64 interpret_expr(Expr* e) {
                         break;
                         
                         default:
-                        exit(1);
+                        fatal("LEX: Unrecognized OPCODE");
                     }
                 }
                 case OPTYPE_UNARY:

@@ -8,3 +8,7 @@ typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
 
+void fatal(const char* msg) {
+    printf("FATAL ERROR: %s", msg);
+    abort();
+}
