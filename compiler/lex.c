@@ -102,6 +102,19 @@ bool next_token() {
             token.kind = TOKENKIND_EOF;
             break;
         }
+        
+        case '(':
+        {
+            token.kind = TOKENKIND_OBRACKET;
+            break;
+        }
+        
+        case ')':
+        {
+            token.kind = TOKENKIND_CBRACKET;
+            break;
+        }
+        
         case ' ': case '\t': case '\n':
         {
             goto start;
@@ -115,6 +128,11 @@ bool next_token() {
         }
     }
     return true;
+}
+
+void stream_init(char* expr) {
+    stream = expr;
+    next_token();
 }
 
 bool is_token(TokenKind kind) {
@@ -135,7 +153,7 @@ bool expect_token(TokenKind kind) {
         next_token();
         return true;
     } else {
-        exit(1);
+        fatal("Unexpected token found\n");
         return false;
     }
 }
@@ -164,8 +182,9 @@ void lex_test_1() {
 }
 
 void lex_test_2() {
-    char *expr = "12+54*1234-2";
-    stream = expr;
+    char *expr = "(12+54)*1234-2";
+    stream_init(expr);
+    assert(token.kind == TOKENKIND_OBRACKET);
     next_token();
     assert(token.kind == TOKENKIND_VAL);
     assert(token.val == 12);
@@ -174,6 +193,8 @@ void lex_test_2() {
     next_token();
     assert(token.kind == TOKENKIND_VAL);
     assert(token.val == 54);
+    next_token();
+    assert(token.kind == TOKENKIND_CBRACKET);
     next_token();
     assert(token.kind == TOKENKIND_MUL);
     next_token();
@@ -192,7 +213,3 @@ void lex_test() {
 }
 
 
-void stream_init(char* expr) {
-    stream = expr;
-    next_token();
-}

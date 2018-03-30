@@ -20,6 +20,8 @@ typedef enum TokenKind {
     
     TOKENKIND_COMPL,
     TOKENKIND_VAL,
+    TOKENKIND_OBRACKET,
+    TOKENKIND_CBRACKET,
 } TokenKind;
 
 typedef struct Token {
